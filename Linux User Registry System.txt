@@ -1,0 +1,137 @@
+1. Inregistrare utilizatori noi
+
+#!/bin/bash
+
+REGISTRY_FILE="users.csv"
+
+# Funcție pentru generarea unui ID unic
+generate_id() {
+  echo $(($(tail -n 1 $REGISTRY_FILE | cut -d, -f1) + 1))
+}
+
+# Funcție pentru verificarea existentei unui utilizator
+user_exists() {
+  grep -q "^$1," $REGISTRY_FILE
+}
+
+# Crearea fișierului CSV dacă nu există
+if [ ! -f $REGISTRY_FILE ]; then
+  echo "ID,Username,Email,Password,HomeDir,LastLogin" > $REGISTRY_FILE
+fi
+
+read -p "Enter username: " username
+
+if user_exists $username; then
+  echo "User already exists!"
+  exit 1
+fi
+
+read -p "Enter email: " email
+read -s -p "Enter password: " password
+echo
+
+# Generarea unui ID unic și a unui director home
+user_id=$(generate_id)
+home_dir="home/$username"
+
+# Adăugarea utilizatorului în registru
+echo "$user_id,$username,$email,$password,$home_dir," >> $REGISTRY_FILE
+
+# Crearea directorului home
+mkdir -p $home_dir
+
+echo "User $username registered successfully with home directory $home_dir."
+
+
+2. Autentificare utilizatori + logout 
+
+#!/bin/bash
+
+REGISTRY_FILE="users.csv"
+LOGGED_IN_USERS="logged_in_users.txt"
+
+# Funcție pentru autentificare
+login() {
+  read -p "Enter username: " username
+
+  if ! grep -q "^.*,${username},.*," $REGISTRY_FILE; then
+    echo "User does not exist!"
+    exit 1
+  fi
+
+  read -s -p "Enter password: " password
+  echo
+
+  stored_password=$(grep "^.*,${username},.*," $REGISTRY_FILE | cut -d, -f4)
+
+  if [ "$password" != "$stored_password" ]; then
+    echo "Incorrect password!"
+    exit 1
+  fi
+
+  home_dir=$(grep "^.*,${username},.*," $REGISTRY_FILE | cut -d, -f5)
+  sed -i "/^.*,${username},.*$/ s/,$/,$(date)/" $REGISTRY_FILE
+
+  echo $username >> $LOGGED_IN_USERS
+  echo "User $username logged in. Navigating to home directory $home_dir."
+  cd $home_dir
+}
+
+# Funcție pentru logout
+logout() {
+  read -p "Enter username: " username
+
+  if ! grep -q "^$username$" $LOGGED_IN_USERS; then
+    echo "User $username is not logged in!"
+    exit 1
+  fi
+
+  sed -i "/^$username$/d" $LOGGED_IN_USERS
+  echo "User $username logged out."
+}
+
+# Selectarea acțiunii
+echo "1. Login"
+echo "2. Logout"
+read -p "Select option: " option
+
+if [ "$option" -eq 1 ]; then
+  login
+elif [ "$option" -eq 2 ]; then
+  logout
+else
+  echo "Invalid option!"
+  exit 1
+fi
+
+
+3. Generare de rapoarte
+
+#!/bin/bash
+
+LOGGED_IN_USERS="logged_in_users.txt"
+
+generate_report() {
+  read -p "Enter username: " username
+
+  if ! grep -q "^$username$" $LOGGED_IN_USERS; then
+    echo "User $username is not logged in!"
+    exit 1
+  fi
+
+  home_dir="home/$username"
+  report_file="$home_dir/report.txt"
+
+  num_files=$(find $home_dir -type f | wc -l)
+  num_dirs=$(find $home_dir -type d | wc -l)
+  disk_usage=$(du -sh $home_dir | cut -f1)
+
+  echo "User Report for $username" > $report_file
+  echo "Number of files: $num_files" >> $report_file
+  echo "Number of directories: $num_dirs" >> $report_file
+  echo "Disk usage: $disk_usage" >> $report_file
+
+  echo "Report generated at $report_file."
+}
+
+generate_report
